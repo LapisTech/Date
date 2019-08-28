@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+	<meta charset="utf-8">
+	<title>Date</title>
+	<meta name="description" content="Date,日付">
+	<script type="text/javascript">
+customElements.define( 'select-input', class extends HTMLElement
+{
+	constructor()
+	{
+		super();
+
+		const style = document.createElement( 'style' );
+		style.textContent =
+		[
+			':host { display: inline-block; --size: 1em; }',
+			':host > div { position: relative; width: 100%; height: 100%; overflow: hidden; }',
+			':host > div > * { font-size: var( --font-size ); box-sizing: border-box; display: block; width: 100%; height: 100%; }',
+			':host > div > input { display: none; position: absolute; top: 0; left: 0; }',
+			':host( [ new ] ) > div > input { display: block; }',
+		].join( '' );
+
+		this.input = document.createElement( 'input' );
+		this.input.type = 'number';
+		this.input.addEventListener( 'keydown', ( event ) => { this.onInput( event ); } );
+		this.input.addEventListener( 'blur', () => { this.new = false; this.select.selectedIndex = 1; } );
+
+		this.select = document.createElement( 'select' );
+		const option = document.createElement( 'option' );
+		option.value = 'new';
+		this.select.appendChild( option );
+		this.select.addEventListener( 'change', ( event ) => { event.stopPropagation(); this.onChange(); } );
+
+		const contents = document.createElement( 'div' );
+		contents.appendChild( this.select );
+		contents.appendChild( this.input );
+
+		const shadow = this.attachShadow( { mode: 'open' } );
+		shadow.appendChild( style );
+		shadow.appendChild( contents );
+	}
+
+	onInput( event )
+	{
+		if ( event.keyCode !== 13 ) { return; }
+		this.new = false;
+		const value = parseInt( this.input.value );
+		this.input.value = '';
+
+		if ( Number.isNaN( value ) )
+		{
+			if ( 1 < this.select.options.length )
+			{
+				this.select.selectedIndex = 1;
+			}
+			return;
+		}
+
+		const option = this.search( value ) || document.createElement( 'option' );
+		if ( !option.value )
+		{
+			option.value = value + '';
+			option.textContent = option.value;
+			this.select.insertBefore( option, this.select.options[ 1 ] );
+		}
+		this.selectedValue = option.value;
+		this.dispatchEvent( new Event( 'change' ) );
+	}
+
+	onChange()
+	{
+		if (  this.select.options[ this.select.selectedIndex ].value === 'new' )
+		{
+			this.new = true;
+			this.input.focus();
+			return;
+		}
+		this.dispatchEvent( new Event( 'change' ) );
+	}
+
+	search( value )
+	{
+		for ( let option of this.select.options )
+		{
+			if ( option.value == value ) { return option; }
+		}
+		return null;
+	}
+
+	get selected() { return this.select.options[ this.select.selectedIndex ]; }
+	set selected( value )
+	{
+		this.select.selectedIndex = value;
+		if ( this.select.selectedIndex === 0 ) { this.new = true; }
+	}
+
+	get selectedValue(){ return parseInt( this.select.options[ this.select.selectedIndex ].value ) || 0; }
+	set selectedValue( value )
+	{
+		for ( let i = 0 ; i < this.select.options.length ; ++i )
+		{
+			if ( this.select.options[ i ].value === value )
+			{
+				this.select.selectedIndex = i;
+				break;
+			}
+		}
+	}
+
+	get new() { return this.hasAttribute( 'new' ); }
+	set new( value ) { value ? this.setAttribute( 'new', '' ) : this.removeAttribute( 'new' ); }
+
+	appendChild( node )
+	{
+		if ( node && node.tagName === 'OPTION' )
+		{
+			return this.select.appendChild( node );
+		}
+		return super.appendChild( node );
+	}
+} );
+
+customElements.whenDefined( 'select-input' ).then( () =>
+{
+	function AddOptions( select, start, end, diff = 0 )
+	{
+		for ( ; start <= end ; ++start )
+		{
+			const option = document.createElement( 'option' );
+			option.value = start;
+			option.textContent = start + diff;
+			select.appendChild( option );
+		}
+	}
+
+	customElements.define( 'date-data', class extends HTMLElement
+	{
+		constructor()
+		{
+			super();
+
+			this.date = new Date();
+
+			const style = document.createElement( 'style' );
+			style.textContent =
+			[
+				':host { display: inline-block; --font-size: 1rem; }',
+				':host > div { display: flex; align-items: center; }',
+				':host select-input { --size: var( --font-size ); }',
+				':host select { font-size: var( --font-size ); vertical-align: top; }',
+				':host span { display: inline-block; font-size: var( --font-size ); line-height: 1em; padding: 0 0.2em; }',
+				':host span::after { content: "/"; }',
+			].join( '' );
+
+			this.year = new ( customElements.get( 'select-input' ) )();
+			for ( let y = this.date.getFullYear() ; 1970 <= y ; --y )
+			{
+				const option = document.createElement( 'option' );
+				option.value = y + '';
+				option.textContent = option.value;
+				this.year.appendChild( option );
+			}
+			this.year.selected = 1;
+			this.year.addEventListener( 'change', () => {console.log(this.year.selectedValue); this.date.setFullYear( this.year.selectedValue ); } );
+
+			this.month = document.createElement( 'select' );
+			AddOptions( this.month, 0, 11, 1 );
+			this.month.addEventListener( 'change', () =>
+			{
+				this.changeMonth( parseInt( this.month.options[ this.month.selectedIndex ].value ) );
+			} );
+			this.month.addEventListener( 'change', () =>
+			{
+				this.date.setMonth( this.month.selectedIndex );
+				this.date.setDate( this.day.selectedIndex + 1 );
+			} );
+
+			this.day = document.createElement( 'select' );
+			AddOptions( this.day, 1, 31 );
+			this.day.addEventListener( 'change', () => { this.date.setDate( this.day.selectedIndex + 1 ); } );
+
+			this.update();
+
+			const contents = document.createElement( 'div' );
+			contents.appendChild( this.year );
+			contents.appendChild( document.createElement( 'span' ) );
+			contents.appendChild( this.month );
+			contents.appendChild( document.createElement( 'span' ) );
+			contents.appendChild( this.day );
+
+			const shadow = this.attachShadow( { mode: 'open' } );
+			shadow.appendChild( style );
+			shadow.appendChild( contents );
+		}
+
+		changeMonth( index )
+		{
+			switch ( index )
+			{
+				case 1: // 28 or 29
+					const leap = ( (year%4 == 0) && (year%100 != 0) || (year%400 == 0) ) ? 1 : 0;
+					this.day.options[ 28 ].disabled = leap ? false : true;
+					this.day.options[ 29 ].disabled = true;
+					this.day.options[ 30 ].disabled = true;
+					if ( 28 + leap <= this.day.selectedIndex ) { this.day.selectedIndex = 27 + leap; }
+					break;
+				case 3: // 30
+				case 5:
+				case 8:
+				case 10:
+					this.day.options[ 28 ].disabled = false;
+					this.day.options[ 29 ].disabled = false;
+					this.day.options[ 30 ].disabled = true;
+					if ( 30 <= this.day.selectedIndex ) { this.day.selectedIndex = 29; }
+					break;
+				default: // 31
+					this.day.options[ 28 ].disabled = false;
+					this.day.options[ 29 ].disabled = false;
+					this.day.options[ 30 ].disabled = false;
+					break;
+			}
+		}
+
+		update()
+		{
+			this.year.selectedValue = this.date.getFullYear();
+			this.month.selectedIndex = this.date.getMonth();
+			this.day.selectedIndex = this.date.getDate() - 1;
+			this.changeMonth( this.month.selectedIndex );
+		}
+	} );
+
+} );
+
+function Init()
+{
+	const date = document.getElementById( 'date' );
+	const add = document.getElementById( 'add' );
+	const result = document.getElementById( 'result' );
+
+	document.getElementById( 'calc' ).addEventListener( 'click', () =>
+	{
+		const value = parseInt( add.value ) || 0;
+		const newdate = new Date( Math.floor( date.date.getTime() ) + value * 24 * 60 * 60 * 1000 );
+		result.textContent = [ newdate.getFullYear(), newdate.getMonth() + 1, newdate.getDate() ].join( '/' );
+	} );
+}
+
+Promise.all(
+[
+	customElements.whenDefined( 'date-data' ),
+	new Promise( ( resolve ) => { document.addEventListener( 'DOMContentLoaded', resolve ) } ),
+] ).then( Init );
+	</script>
+	<style type="text/css">
+html { font-size: 30px; }
+body{ padding: 0; margin: 0; }
+:not( :defined ) { display: none; }
+body > div { text-align: center; padding: 0.5rem 0; }
+input, button { font-size: 1rem; }
+input { width: 4rem; }
+button { width: 1.2rem; height: 1.2rem; line-height: 1.2rem; display: inline-block; box-sizing: border-box; overflow: hidden; border-radius: 50%; padding: 0; }
+	</style>
+</head>
+<body>
+	<div>
+		<h1>Date</h1>
+		<date-data id="date"></date-data>
+		<hr>
+		+<input type="number" id="add">
+		<button id="calc">=</button>
+		<div id="result"></div>
+	</div>
+</body>
+</html>
